@@ -69,9 +69,9 @@
 ## 8. Exception Handling
 
 - Creating custom runtime exceptions:
-    - `NotFoundException`
-    - `InvalidInputException`
-    - `ElementAlreadyExistException`
+  - `NotFoundException`
+  - `InvalidInputException`
+  - `ElementAlreadyExistException`
 - Centralized exception handling using `@RestControllerAdvice`.
 - Handling exceptions using `@ExceptionHandler`.
 - Handling validation failures using `MethodArgumentNotValidException`.
@@ -91,3 +91,11 @@
 
 ## 10. Pagination & Sorting
 
+- Using Spring Data's `Page` and `Pageable`.
+- Implementing pagination through `findAll(Pageable)`.
+- Converting paginated entity results into DTOs using `Page.map()`.
+- Configuring default pagination and sorting using `@PageableDefault`.
+- Understanding zero-based page indexing.
+---
+
+**Key takeaway:** Built practical experience with Spring Boot, Spring Data JPA, Hibernate, REST APIs, dependency injection, transaction management, validation, exception handling, business logic and database relationships through the development of FoodFlow.
