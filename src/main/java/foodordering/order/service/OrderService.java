@@ -3,8 +3,9 @@ package foodordering.order.service;
 import foodordering.order.dto.OrderRequestDTO;
 import foodordering.order.dto.OrderResponseDTO;
 import foodordering.order.enums.OrderStatus;
+import org.springframework.data.domain.Page;
 
-import java.util.List;
+import org.springframework.data.domain.Pageable;import java.util.List;
 
 public interface OrderService {
 
@@ -15,7 +16,7 @@ public interface OrderService {
     OrderResponseDTO getOrderById(Long id);
 
     // Retrieves all orders.
-    List<OrderResponseDTO> getAllOrders();
+    Page<OrderResponseDTO> getAllOrders(Pageable pageable);
 
     // Updates the status of an existing order.
     OrderResponseDTO updateOrderStatus(Long id, OrderStatus status);

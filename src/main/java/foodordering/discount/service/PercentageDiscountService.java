@@ -1,9 +1,11 @@
 package foodordering.discount.service;
 
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 
 @Service
+@Primary
 public class PercentageDiscountService implements DiscountService {
 
     // 🔴 Why use static final?

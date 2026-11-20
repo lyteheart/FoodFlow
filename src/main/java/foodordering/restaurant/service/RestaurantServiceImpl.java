@@ -1,10 +1,15 @@
 package foodordering.restaurant.service;
 
 
+import foodordering.exception.InvalidInputException;
+import foodordering.exception.NotFoundException;
+import foodordering.menu.repository.MenuRepository;
 import foodordering.restaurant.dto.RestaurantRequestDTO;
 import foodordering.restaurant.dto.RestaurantResponseDTO;
 import foodordering.restaurant.entity.Restaurant;
 import foodordering.restaurant.repository.RestaurantRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,10 +17,11 @@ import java.util.List;
 @Service
 public class RestaurantServiceImpl implements RestaurantService {
     private final RestaurantRepository restaurantRepository;
-
+    private final MenuRepository menuRepository;
     // Constructor injection to provide access to the RestaurantRepository.
-    public RestaurantServiceImpl(RestaurantRepository restaurantRepository) {
+    public RestaurantServiceImpl(RestaurantRepository restaurantRepository, MenuRepository menuRepository) {
         this.restaurantRepository = restaurantRepository;
+        this.menuRepository = menuRepository;
     }
 
     @Override
@@ -42,7 +48,9 @@ public class RestaurantServiceImpl implements RestaurantService {
 
         // Find the restaurant by ID or throw an exception if it doesn't exist.
         Restaurant restaurant = restaurantRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Restaurant not found with ID: " + id));
+                .orElseThrow(() ->
+                        new NotFoundException("Restaurant not found with ID: " + id)
+                );
 
         // Convert Restaurant entity into response DTO.
         RestaurantResponseDTO responseDTO = new RestaurantResponseDTO();
@@ -54,21 +62,20 @@ public class RestaurantServiceImpl implements RestaurantService {
     }
 
     @Override
-    public List<RestaurantResponseDTO> getAllRestaurants() {
+    public Page<RestaurantResponseDTO> getAllRestaurants(Pageable pageable) {
 
         // Retrieve all restaurants from the database.
-        List<Restaurant> restaurants = restaurantRepository.findAll();
+        Page<Restaurant> restaurants = restaurantRepository.findAll(pageable);
 
         // Convert each Restaurant entity into a RestaurantResponseDTO.
-        return restaurants.stream()
+        return restaurants
                 .map(restaurant -> {
                     RestaurantResponseDTO responseDTO = new RestaurantResponseDTO();
                     responseDTO.setId(restaurant.getId());
                     responseDTO.setName(restaurant.getName());
                     responseDTO.setAddress(restaurant.getAddress());
                     return responseDTO;
-                })
-                .toList();
+                });
     }
 
     @Override
@@ -76,7 +83,9 @@ public class RestaurantServiceImpl implements RestaurantService {
 
         // Find the existing restaurant or throw an exception.
         Restaurant restaurant = restaurantRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Restaurant not found with ID: " + id));
+                .orElseThrow(() ->
+                        new NotFoundException("Restaurant not found with ID: " + id)
+                );
 
         // Update restaurant details.
         restaurant.setName(requestDTO.getName());
@@ -99,7 +108,14 @@ public class RestaurantServiceImpl implements RestaurantService {
 
         // Find the restaurant or throw an exception if it doesn't exist.
         Restaurant restaurant = restaurantRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Restaurant not found with ID: " + id));
+                .orElseThrow(() ->
+                        new NotFoundException("Restaurant not found with ID: " + id)
+                );
+        if (menuRepository.existsByRestaurantId(id)) {
+            throw new InvalidInputException(
+                    "Cannot delete a restaurant that still has menu items."
+            );
+        }
 
         // Delete the restaurant from the database.
         restaurantRepository.delete(restaurant);

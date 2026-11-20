@@ -1,10 +1,13 @@
 
 package foodordering.menu.service;
 
+import foodordering.exception.InvalidInputException;
+import foodordering.exception.NotFoundException;
 import foodordering.menu.dto.MenuItemRequestDTO;
 import foodordering.menu.dto.MenuItemResponseDTO;
 import foodordering.menu.entity.MenuItem;
 import foodordering.menu.repository.MenuRepository;
+import foodordering.order.repository.OrderItemRepository;
 import foodordering.restaurant.entity.Restaurant;
 import foodordering.restaurant.repository.RestaurantRepository;
 import org.springframework.stereotype.Service;
@@ -16,12 +19,14 @@ public class MenuServiceImpl implements MenuService {
 
     private final MenuRepository menuRepository;
     private final RestaurantRepository restaurantRepository;
+    private final OrderItemRepository orderItemRepository;
 
     public MenuServiceImpl(
             MenuRepository menuRepository,
-            RestaurantRepository restaurantRepository) {
+            RestaurantRepository restaurantRepository, OrderItemRepository orderItemRepository) {
         this.menuRepository = menuRepository;
         this.restaurantRepository = restaurantRepository;
+        this.orderItemRepository = orderItemRepository;
     }
 
     // Creates a menu item for an existing restaurant.
@@ -29,7 +34,7 @@ public class MenuServiceImpl implements MenuService {
     public MenuItemResponseDTO saveMenuItem(MenuItemRequestDTO requestDTO) {
 
         Restaurant restaurant = restaurantRepository.findById(requestDTO.getRestaurantId())
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new NotFoundException(
                         "Restaurant not found with ID: " + requestDTO.getRestaurantId()));
 
         MenuItem menuItem = new MenuItem();
@@ -48,7 +53,7 @@ public class MenuServiceImpl implements MenuService {
     public MenuItemResponseDTO getMenuItemById(Long id) {
 
         MenuItem menuItem = menuRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new NotFoundException(
                         "Menu item not found with ID: " + id));
 
         return mapToResponseDTO(menuItem);
@@ -69,12 +74,14 @@ public class MenuServiceImpl implements MenuService {
     public MenuItemResponseDTO updateMenuItem(Long id, MenuItemRequestDTO requestDTO) {
 
         MenuItem menuItem = menuRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
-                        "Menu item not found with ID: " + id));
+                .orElseThrow(() ->
+                        new NotFoundException("Menu item not found with ID: " + id)
+                );
 
         Restaurant restaurant = restaurantRepository.findById(requestDTO.getRestaurantId())
-                .orElseThrow(() -> new RuntimeException(
-                        "Restaurant not found with ID: " + requestDTO.getRestaurantId()));
+                .orElseThrow(() ->
+                        new NotFoundException("Restaurant not found with ID: " + requestDTO.getRestaurantId())
+                );
 
         menuItem.setName(requestDTO.getName());
         menuItem.setPrice(requestDTO.getPrice());
@@ -91,10 +98,25 @@ public class MenuServiceImpl implements MenuService {
     public void deleteMenuItem(Long id) {
 
         MenuItem menuItem = menuRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
-                        "Menu item not found with ID: " + id));
+                .orElseThrow(() ->
+                        new NotFoundException("Menu item not found with ID: " + id)
+                );
+        if (orderItemRepository.existsByMenuItemId(id)) {
+            throw new InvalidInputException(
+                    "Cannot delete a menu item that is already part of an order."
+            );
+        }
 
         menuRepository.delete(menuItem);
+    }
+
+    @Override
+    public List<MenuItemResponseDTO> getMenuItemsByRestaurant(Long restaurantId) {
+
+        return menuRepository.findByRestaurantId(restaurantId)
+                .stream()
+                .map(this::mapToResponseDTO)
+                .toList();
     }
 
     // Converts MenuItem entity into MenuItemResponseDTO.
@@ -111,4 +133,6 @@ public class MenuServiceImpl implements MenuService {
 
         return responseDTO;
     }
+
+
 }

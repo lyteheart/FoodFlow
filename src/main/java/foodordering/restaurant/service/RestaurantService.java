@@ -3,6 +3,8 @@ package foodordering.restaurant.service;
 
 import foodordering.restaurant.dto.RestaurantRequestDTO;
 import foodordering.restaurant.dto.RestaurantResponseDTO;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -15,7 +17,7 @@ public interface RestaurantService {
     RestaurantResponseDTO getRestaurantById(Long id);
 
     // Retrieves all restaurants.
-    List<RestaurantResponseDTO> getAllRestaurants();
+    Page<RestaurantResponseDTO> getAllRestaurants(Pageable pageable);
 
     // Updates an existing restaurant's details using its ID.
     RestaurantResponseDTO updateRestaurant(Long id, RestaurantRequestDTO requestDTO);

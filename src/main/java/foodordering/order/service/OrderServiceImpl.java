@@ -1,6 +1,9 @@
 
 package foodordering.order.service;
 
+import foodordering.discount.service.DiscountService;
+import foodordering.exception.InvalidInputException;
+import foodordering.exception.NotFoundException;
 import foodordering.order.dto.OrderRequestDTO;
 import foodordering.order.dto.OrderResponseDTO;
 import foodordering.order.dto.OrderItemResponseDTO;
@@ -12,6 +15,10 @@ import foodordering.order.repository.OrderItemRepository;
 import foodordering.menu.entity.MenuItem;
 import foodordering.menu.repository.MenuRepository;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,15 +32,21 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final MenuRepository menuRepository;
+    private final DiscountService discountService;
+    private final ObjectProvider<OrderNumberGenerator> orderNumberGeneratorProvider;
 
     public OrderServiceImpl(
             OrderRepository orderRepository,
             OrderItemRepository orderItemRepository,
-            MenuRepository menuRepository) {
+            MenuRepository menuRepository,
+            @Qualifier("flatDiscountService") DiscountService discountService,
+            ObjectProvider<OrderNumberGenerator> orderNumberGeneratorProvider) {
 
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.menuRepository = menuRepository;
+        this.discountService = discountService;
+        this.orderNumberGeneratorProvider = orderNumberGeneratorProvider;
     }
 
     // Places an order after validating items and available stock.
@@ -59,19 +72,19 @@ public class OrderServiceImpl implements OrderService {
         // Validate every item before changing any stock.
         for (Map.Entry<Long, Integer> entry : requestedQuantities.entrySet()) {
 
-            MenuItem menuItem = menuRepository.findById(entry.getKey())
-                    .orElseThrow(() -> new RuntimeException(
+            MenuItem menuItem = menuRepository.findByIdForUpdate(entry.getKey())
+                    .orElseThrow(() -> new NotFoundException(
                             "Menu item not found with ID: " + entry.getKey()));
 
             if (restaurantId == null) {
                 restaurantId = menuItem.getRestaurant().getId();
             } else if (!restaurantId.equals(menuItem.getRestaurant().getId())) {
-                throw new RuntimeException(
+                throw new InvalidInputException(
                         "An order can contain items from only one restaurant.");
             }
 
             if (menuItem.getStockQuantity() < entry.getValue()) {
-                throw new RuntimeException(
+                throw new InvalidInputException(
                         "Insufficient stock for menu item: " + menuItem.getName());
             }
 
@@ -82,15 +95,23 @@ public class OrderServiceImpl implements OrderService {
             );
         }
 
+        // Calculate discount.
+        BigDecimal discountAmount = discountService.calculateDiscount(totalAmount);
+        BigDecimal finalAmount = totalAmount.subtract(discountAmount);
+
         // Create the order.
         Order order = new Order();
-        order.setOrderNumber(UUID.randomUUID().toString());
+
+        order.setOrderNumber(
+                orderNumberGeneratorProvider.getObject().generateOrderNumber()
+        );
+
         order.setCustomerName(requestDTO.getCustomerName());
         order.setCustomerEmail(requestDTO.getCustomerEmail());
         order.setCustomerPhone(requestDTO.getCustomerPhone());
         order.setDeliveryAddress(requestDTO.getDeliveryAddress());
         order.setStatus(OrderStatus.PLACED);
-        order.setTotalAmount(totalAmount);
+        order.setTotalAmount(finalAmount);
         order.setOrderDate(LocalDateTime.now());
 
         Order savedOrder = orderRepository.save(order);
@@ -129,21 +150,19 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponseDTO getOrderById(Long id) {
 
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new NotFoundException(
                         "Order not found with ID: " + id));
 
         return mapToResponseDTO(order);
     }
 
-    // Retrieves all orders.
+    // Retrieves all orders with pagination.
     @Override
     @Transactional(readOnly = true)
-    public List<OrderResponseDTO> getAllOrders() {
+    public Page<OrderResponseDTO> getAllOrders(Pageable pageable) {
 
-        return orderRepository.findAll()
-                .stream()
-                .map(this::mapToResponseDTO)
-                .toList();
+        return orderRepository.findAll(pageable)
+                .map(this::mapToResponseDTO);
     }
 
     // Updates the status of an existing order.
@@ -152,11 +171,11 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponseDTO updateOrderStatus(Long id, OrderStatus status) {
 
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new NotFoundException(
                         "Order not found with ID: " + id));
 
         if (status == null || !isValidStatusTransition(order.getStatus(), status)) {
-            throw new RuntimeException(
+            throw new InvalidInputException(
                     "Invalid order status transition: "
                             + order.getStatus() + " -> " + status);
         }
@@ -174,12 +193,14 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponseDTO cancelOrder(Long id) {
 
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new NotFoundException(
                         "Order not found with ID: " + id));
 
+        // Check whether cancellation is allowed
         if (order.getStatus() == OrderStatus.CANCELLED
                 || order.getStatus() == OrderStatus.DELIVERED) {
-            throw new RuntimeException(
+
+            throw new InvalidInputException(
                     "This order cannot be cancelled.");
         }
 
@@ -214,6 +235,7 @@ public class OrderServiceImpl implements OrderService {
             case PLACED -> newStatus == OrderStatus.PREPARING;
             case PREPARING -> newStatus == OrderStatus.OUT_FOR_DELIVERY;
             case OUT_FOR_DELIVERY -> newStatus == OrderStatus.DELIVERED;
+            // lrn - Because they are terminal states. Once an order reaches either state, it cannot move to another status through this method.
             case DELIVERED, CANCELLED -> false;
         };
     }
@@ -237,6 +259,7 @@ public class OrderServiceImpl implements OrderService {
                 orderItemRepository.findByOrderId(order.getId())
                         .stream()
                         .map(item -> {
+
                             OrderItemResponseDTO itemDTO =
                                     new OrderItemResponseDTO();
 

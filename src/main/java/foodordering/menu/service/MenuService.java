@@ -21,4 +21,6 @@ public interface MenuService {
 
     // Deletes a menu item using its ID.
     void deleteMenuItem(Long id);
+
+    List<MenuItemResponseDTO> getMenuItemsByRestaurant(Long restaurantId);
 }
